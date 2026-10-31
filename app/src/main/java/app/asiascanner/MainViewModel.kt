@@ -79,7 +79,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 fileName.value = name
                 val withQr = list.count { it.qrPath != null }
                 msg.value = if (withQr == 0) {
-                    "QR-картинки в файле не найдены. Проверьте, что они лежат в столбце D."
+                    "QR-картинки в файле не найдены. Части файла: ${Xlsx.listParts(source)}"
                 } else {
                     "Загружено: ${list.size} строк, QR: $withQr"
                 }

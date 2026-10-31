@@ -196,6 +196,38 @@ object Xlsx {
         return out
     }
 
+    /** Картинки WPS Office: в ячейке =DISPIMG("ID_..."), сами файлы в xl/cellimages.xml. row -> bytes */
+    private fun wpsCellImages(z: Map<String, ByteArray>, sheetDoc: Document): Map<Int, ByteArray> {
+        val cb = z["xl/cellimages.xml"] ?: return emptyMap()
+        val rl = rels(z, "xl/cellimages.xml")
+        val byId = HashMap<String, ByteArray>()
+        for (ci in elems(parse(cb), "cellImage")) {
+            val name = elems(ci, "cNvPr").firstOrNull()?.getAttribute("name") ?: continue
+            val blip = elems(ci, "blip").firstOrNull() ?: continue
+            val rid = attrLocal(blip, "embed") ?: continue
+            val bytes = rl[rid]?.second?.let { z[it] } ?: continue
+            byId[name] = bytes
+        }
+        val re = Regex("DISPIMG\\(\\s*\"([^\"]+)\"")
+        val out = LinkedHashMap<Int, ByteArray>()
+        for (c in elems(sheetDoc, "c")) {
+            val f = elems(c, "f").firstOrNull()?.textContent ?: continue
+            val id = re.find(f)?.groupValues?.get(1) ?: continue
+            val b = byId[id] ?: continue
+            out.putIfAbsent(rowNum(c.getAttribute("r")), b)
+        }
+        return out
+    }
+
+    /** Для диагностики: какие части с картинками есть в файле. */
+    fun listParts(file: File): String = try {
+        readZip(file).keys.filter {
+            it.contains("media") || it.contains("drawing") || it.contains("cellimages") || it.contains("richData")
+        }.joinToString(", ").ifEmpty { "картинок в файле нет" }
+    } catch (e: Exception) {
+        "не удалось прочитать файл"
+    }
+
     fun read(file: File): List<RowData> {
         val z = readZip(file)
         val sheet = firstSheet(z)
@@ -204,6 +236,7 @@ object Xlsx {
         val imgs = LinkedHashMap<Int, ByteArray>()
         imgs.putAll(drawingImages(z, sheet, doc))
         for ((k, v) in richImages(z, doc)) imgs.putIfAbsent(k, v)
+        for ((k, v) in wpsCellImages(z, doc)) imgs.putIfAbsent(k, v)
 
         val names = HashMap<Int, String>()
         for (c in elems(doc, "c")) {
@@ -309,6 +342,20 @@ object Xlsx {
             for (c in elems(doc, "c")) {
                 if (c.hasAttribute("vm")) {
                     c.removeAttribute("vm")
+                    c.removeAttribute("t")
+                    while (c.firstChild != null) c.removeChild(c.firstChild)
+                }
+            }
+        }
+
+        // 2b) картинки WPS (DISPIMG)
+        if (z.containsKey("xl/cellimages.xml")) {
+            removed += "xl/cellimages.xml"
+            removed += relsPath("xl/cellimages.xml")
+            rels(z, "xl/cellimages.xml").values.forEach { if (it.first.endsWith("/image")) removed += it.second }
+            for (c in elems(doc, "c")) {
+                val f = elems(c, "f").firstOrNull()?.textContent ?: continue
+                if (f.contains("DISPIMG")) {
                     c.removeAttribute("t")
                     while (c.firstChild != null) c.removeChild(c.firstChild)
                 }
