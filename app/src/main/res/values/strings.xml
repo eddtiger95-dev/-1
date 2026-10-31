@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Asia Price Scanner</string>
+    <string name="a11y_desc">Нужна, чтобы приложение само нажимало кнопки и читало цены в приложении «Азия Онлайн». Работает только с этим приложением.</string>
+</resources>
